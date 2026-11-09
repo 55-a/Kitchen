@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Новая закупка</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            padding: 16px;
+            padding-bottom: 80px;
+        }
+        h1 { font-size: 20px; font-weight: 600; margin-bottom: 16px; }
+        .form-group { margin-bottom: 16px; }
+        label { display: block; font-size: 14px; color: var(--tg-theme-hint-color, #999999); margin-bottom: 6px; }
+        select, input {
+            width: 100%; padding: 12px;
+            border: 1px solid var(--tg-theme-hint-color, #cccccc);
+            border-radius: 8px;
+            background-color: var(--tg-theme-secondary-bg-color, #f5f5f5);
+            color: var(--tg-theme-text-color, #000000);
+            font-size: 16px;
+        }
+        .radio-group {
+            display: flex; gap: 8px; margin-bottom: 16px;
+        }
+        .radio-btn {
+            flex: 1; padding: 12px; border: 1px solid var(--tg-theme-hint-color, #cccccc);
+            border-radius: 8px; background-color: var(--tg-theme-secondary-bg-color, #f5f5f5);
+            color: var(--tg-theme-text-color, #000000); font-size: 14px; cursor: pointer;
+            text-align: center;
+        }
+        .radio-btn.active {
+            background-color: var(--tg-theme-button-color, #3390ec);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border-color: var(--tg-theme-button-color, #3390ec);
+        }
+        .total-block {
+            background-color: var(--tg-theme-secondary-bg-color, #f5f5f5);
+            border-radius: 12px; padding: 16px; margin-bottom: 16px;
+        }
+        .total-row {
+            display: flex; justify-content: space-between; margin-bottom: 8px;
+        }
+        .total-row:last-child { margin-bottom: 0; font-weight: 600; font-size: 16px; }
+        .main-button {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background-color: var(--tg-theme-button-color, #3390ec);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none; padding: 16px; font-size: 16px; font-weight: 600; cursor: pointer;
+        }
+        .main-button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .stock-info {
+            background-color: var(--tg-theme-secondary-bg-color, #f5f5f5);
+            border-radius: 8px; padding: 12px; margin-top: 8px;
+            font-size: 13px; color: var(--tg-theme-hint-color, #666666);
+        }
+    </style>
+</head>
+<body>
+    <h1>🛒 Новая закупка</h1>
+    
+    <div class="form-group">
+        <label>Продукт</label>
+        <select id="product-select">
+            <option value="">— Выберите продукт —</option>
+            <option value="1">Мясо (кг)</option>
+            <option value="2">Рис (кг)</option>
+            <option value="3">Морковь (кг)</option>
+            <option value="4">Лук (кг)</option>
+            <option value="5">Масло (л)</option>
+            <option value="6">Специи (кг)</option>
+            <option value="7">Упаковка (шт)</option>
+        </select>
+    </div>
+    
+    <div class="form-group">
+        <label>Количество</label>
+        <input type="number" id="quantity" min="0.1" step="0.1" placeholder="Например: 10" />
+    </div>
+    
+    <div class="form-group">
+        <label>Цена за единицу (сум)</label>
+        <input type="number" id="price" min="0" placeholder="Например: 90000" />
+    </div>
+    
+    <div class="form-group">
+        <label>Способ оплаты</label>
+        <div class="radio-group">
+            <div class="radio-btn active" data-method="card">💳 Карта</div>
+            <div class="radio-btn" data-method="cash">💵 Наличные</div>
+        </div>
+    </div>
+    
+    <div class="total-block">
+        <div class="total-row">
+            <span>Сумма закупки</span>
+            <span id="total-amount">0 сум</span>
+        </div>
+        <div class="total-row">
+            <span>Остаток на складе</span>
+            <span id="current-stock">—</span>
+        </div>
+        <div class="total-row">
+            <span>После закупки</span>
+            <span id="new-stock">—</span>
+        </div>
+    </div>
+    
+    <button class="main-button" id="confirm-btn" disabled>
+        ✅ Подтвердить закупку
+    </button>
+    
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+        
+        // Текущие остатки (в реальности придут с сервера)
+        const stock = {
+            1: { name: 'Мясо', unit: 'кг', quantity: 50.0, price: 90000 },
+            2: { name: 'Рис', unit: 'кг', quantity: 100.0, price: 20000 },
+            3: { name: 'Морковь', unit: 'кг', quantity: 50.0, price: 8000 },
+            4: { name: 'Лук', unit: 'кг', quantity: 50.0, price: 5000 },
+            5: { name: 'Масло', unit: 'л', quantity: 30.0, price: 35000 },
+            6: { name: 'Специи', unit: 'кг', quantity: 5.0, price: 1000000 },
+            7: { name: 'Упаковка', unit: 'шт', quantity: 500.0, price: 1000 }
+        };
+        
+        let selectedProduct = null;
+        let paymentMethod = 'card';
+        
+        document.getElementById('product-select').addEventListener('change', (e) => {
+            const productId = e.target.value;
+            if (!productId) {
+                selectedProduct = null;
+                updateDisplay();
+                return;
+            }
+            selectedProduct = stock[productId];
+            updateDisplay();
+        });
+        
+        document.getElementById('quantity').addEventListener('input', updateDisplay);
+        document.getElementById('price').addEventListener('input', updateDisplay);
+        
+        document.querySelectorAll('.radio-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                paymentMethod = btn.dataset.method;
+            });
+        });
+        
+        function updateDisplay() {
+            const quantity = parseFloat(document.getElementById('quantity').value) || 0;
+            const price = parseFloat(document.getElementById('price').value) || 0;
+            const total = quantity * price;
+            
+            document.getElementById('total-amount').textContent = formatMoney(total) + ' сум';
+            
+            if (selectedProduct) {
+                document.getElementById('current-stock').textContent = 
+                    selectedProduct.quantity.toFixed(2) + ' ' + selectedProduct.unit;
+                document.getElementById('new-stock').textContent = 
+                    (selectedProduct.quantity + quantity).toFixed(2) + ' ' + selectedProduct.unit;
+            } else {
+                document.getElementById('current-stock').textContent = '—';
+                document.getElementById('new-stock').textContent = '—';
+            }
+            
+            const btn = document.getElementById('confirm-btn');
+            btn.disabled = !(selectedProduct && quantity > 0 && price > 0);
+        }
+        
+        function formatMoney(amount) {
+            return Math.round(amount).toLocaleString('ru-RU');
+        }
+        
+        document.getElementById('confirm-btn').addEventListener('click', () => {
+            const quantity = parseFloat(document.getElementById('quantity').value);
+            const price = parseFloat(document.getElementById('price').value);
+            
+            const data = {
+                action: 'add_purchase',
+                productId: parseInt(document.getElementById('product-select').value),
+                productName: selectedProduct.name,
+                unit: selectedProduct.unit,
+                quantity: quantity,
+                pricePerUnit: price,
+                totalAmount: quantity * price,
+                paymentMethod: paymentMethod
+            };
+            
+            tg.sendData(JSON.stringify(data));
+            tg.showPopup({
+                title: '✅ Закупка добавлена',
+                message: `Остаток ${selectedProduct.name} увеличен на ${quantity} ${selectedProduct.unit}`,
+                buttons: [{ type: 'ok' }]
+            });
+        });
+    </script>
+</body>
+</html>
