@@ -56,6 +56,7 @@
             display: flex; gap: 16px; font-size: 13px;
             color: var(--tg-theme-hint-color, #666666);
         }
+        .loading { text-align: center; padding: 20px; color: var(--tg-theme-hint-color, #999999); }
     </style>
 </head>
 <body>
@@ -67,69 +68,51 @@
     </div>
     
     <div id="results" class="content active">
-        <div class="stats-card">
-            <div class="stat-row">
-                <span class="stat-label">Выручка</span>
-                <span class="stat-value">1 250 000 сум</span>
+        <div id="stats-loading" class="loading">Загрузка данных...</div>
+        <div id="stats-content" style="display: none;">
+            <div class="stats-card">
+                <div class="stat-row">
+                    <span class="stat-label">Выручка</span>
+                    <span class="stat-value" id="revenue">0 сум</span>
+                </div>
+                <div class="stat-detail" id="revenue-detail">—</div>
+                <div class="stat-row">
+                    <span class="stat-label">Себестоимость</span>
+                    <span class="stat-value" id="cost">0 сум</span>
+                </div>
+                <div class="stat-detail" id="cost-detail">—</div>
+                <div class="stat-row">
+                    <span class="stat-label">Прибыль</span>
+                    <span class="stat-value" id="profit">0 сум</span>
+                </div>
+                <div class="stat-detail" id="profit-detail">—</div>
             </div>
-            <div class="stat-detail">50 порций × 25 000</div>
-            <div class="stat-row">
-                <span class="stat-label">Себестоимость</span>
-                <span class="stat-value">650 000 сум</span>
+            
+            <div class="stats-card">
+                <div class="stat-row">
+                    <span class="stat-label">Долг клиентов</span>
+                    <span class="stat-value negative" id="client-debt">0 сум</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Остаток продуктов</span>
+                    <span class="stat-value" id="stock-value">0 сум</span>
+                </div>
             </div>
-            <div class="stat-detail">проданных порций</div>
-            <div class="stat-row">
-                <span class="stat-label">До налогов</span>
-                <span class="stat-value positive">400 000 сум</span>
-            </div>
-            <div class="stat-detail">после постоянных затрат</div>
-        </div>
-        
-        <div class="stats-card">
-            <div class="stat-row">
-                <span class="stat-label">Долг клиентов</span>
-                <span class="stat-value negative">250 000 сум</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Получено оплат</span>
-                <span class="stat-value">1 000 000 сум</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Остаток продуктов</span>
-                <span class="stat-value">400 000 сум</span>
-            </div>
-            <div class="stat-detail">Купили на 1 млн; израсходовали 600 тыс.</div>
         </div>
     </div>
     
     <div id="clients" class="content">
-        <div class="client-card">
-            <div class="client-header">
-                <span class="client-name">Компания А</span>
-                <span class="client-debt zero">Долг: 0</span>
-            </div>
-            <div class="client-stats">
-                <span>Отгружено: 500 000</span>
-                <span>Оплачено: 500 000</span>
-            </div>
-        </div>
-        
-        <div class="client-card">
-            <div class="client-header">
-                <span class="client-name">Компания Б</span>
-                <span class="client-debt has-debt">Долг: 250 000</span>
-            </div>
-            <div class="client-stats">
-                <span>Отгружено: 750 000</span>
-                <span>Оплачено: 500 000</span>
-            </div>
-        </div>
+        <div id="clients-loading" class="loading">Загрузка клиентов...</div>
+        <div id="clients-content"></div>
     </div>
     
     <script>
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
+        
+        // ВАЖНО: Замени на свой адрес API из Replit
+        const API_URL = 'https://658059b9-1fae-4122-ab09-24f656a9aff1-00-yflos2wz3xgw.sisko.replit.dev';
         
         document.querySelectorAll('.tab').forEach(tab => {
             tab.addEventListener('click', () => {
@@ -139,6 +122,37 @@
                 document.getElementById(tab.dataset.tab).classList.add('active');
             });
         });
+        
+        // Загрузка статистики
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_URL}/api/stats`);
+                const data = await response.json();
+                
+                document.getElementById('revenue').textContent = formatMoney(data.revenue || 0) + ' сум';
+                document.getElementById('cost').textContent = formatMoney(data.cost || 0) + ' сум';
+                
+                const profit = (data.revenue || 0) - (data.cost || 0);
+                const profitEl = document.getElementById('profit');
+                profitEl.textContent = formatMoney(profit) + ' сум';
+                profitEl.className = 'stat-value ' + (profit >= 0 ? 'positive' : 'negative');
+                
+                document.getElementById('client-debt').textContent = formatMoney(data.clientDebt || 0) + ' сум';
+                document.getElementById('stock-value').textContent = formatMoney(data.stockValue || 0) + ' сум';
+                
+                document.getElementById('stats-loading').style.display = 'none';
+                document.getElementById('stats-content').style.display = 'block';
+            } catch (error) {
+                document.getElementById('stats-loading').textContent = 'Ошибка загрузки данных';
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        function formatMoney(amount) {
+            return Math.round(amount).toLocaleString('ru-RU');
+        }
+        
+        loadStats();
     </script>
 </body>
 </html>
