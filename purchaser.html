@@ -25,14 +25,19 @@
             color: var(--tg-theme-text-color, #000000);
             font-size: 16px;
         }
-        .radio-group {
-            display: flex; gap: 8px; margin-bottom: 16px;
+        .ai-button {
+            width: 100%; padding: 14px; margin-bottom: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; border: none; border-radius: 10px;
+            font-size: 16px; font-weight: 600; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
         }
+        .ai-button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .radio-group { display: flex; gap: 8px; margin-bottom: 16px; }
         .radio-btn {
             flex: 1; padding: 12px; border: 1px solid var(--tg-theme-hint-color, #cccccc);
             border-radius: 8px; background-color: var(--tg-theme-secondary-bg-color, #f5f5f5);
-            color: var(--tg-theme-text-color, #000000); font-size: 14px; cursor: pointer;
-            text-align: center;
+            color: var(--tg-theme-text-color, #000000); font-size: 14px; cursor: pointer; text-align: center;
         }
         .radio-btn.active {
             background-color: var(--tg-theme-button-color, #3390ec);
@@ -43,9 +48,7 @@
             background-color: var(--tg-theme-secondary-bg-color, #f5f5f5);
             border-radius: 12px; padding: 16px; margin-bottom: 16px;
         }
-        .total-row {
-            display: flex; justify-content: space-between; margin-bottom: 8px;
-        }
+        .total-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
         .total-row:last-child { margin-bottom: 0; font-weight: 600; font-size: 16px; }
         .main-button {
             position: fixed; bottom: 0; left: 0; right: 0;
@@ -54,16 +57,17 @@
             border: none; padding: 16px; font-size: 16px; font-weight: 600; cursor: pointer;
         }
         .main-button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .stock-info {
-            background-color: var(--tg-theme-secondary-bg-color, #f5f5f5);
-            border-radius: 8px; padding: 12px; margin-top: 8px;
-            font-size: 13px; color: var(--tg-theme-hint-color, #666666);
-        }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
     <h1>🛒 Новая закупка</h1>
     
+    <button class="ai-button" id="ai-scan-btn">
+        📸 Распознать чек (ИИ)
+    </button>
+    <input type="file" id="receipt-input" accept="image/*" class="hidden" />
+
     <div class="form-group">
         <label>Продукт</label>
         <select id="product-select">
@@ -101,14 +105,6 @@
             <span>Сумма закупки</span>
             <span id="total-amount">0 сум</span>
         </div>
-        <div class="total-row">
-            <span>Остаток на складе</span>
-            <span id="current-stock">—</span>
-        </div>
-        <div class="total-row">
-            <span>После закупки</span>
-            <span id="new-stock">—</span>
-        </div>
     </div>
     
     <button class="main-button" id="confirm-btn" disabled>
@@ -120,31 +116,84 @@
         tg.ready();
         tg.expand();
         
-        // Текущие остатки (в реальности придут с сервера)
+        const API_URL = 'https://kitchen-bot-55-a.replit.app';
+        
         const stock = {
-            1: { name: 'Мясо', unit: 'кг', quantity: 50.0, price: 90000 },
-            2: { name: 'Рис', unit: 'кг', quantity: 100.0, price: 20000 },
-            3: { name: 'Морковь', unit: 'кг', quantity: 50.0, price: 8000 },
-            4: { name: 'Лук', unit: 'кг', quantity: 50.0, price: 5000 },
-            5: { name: 'Масло', unit: 'л', quantity: 30.0, price: 35000 },
-            6: { name: 'Специи', unit: 'кг', quantity: 5.0, price: 1000000 },
-            7: { name: 'Упаковка', unit: 'шт', quantity: 500.0, price: 1000 }
+            1: { name: 'Мясо', unit: 'кг' }, 2: { name: 'Рис', unit: 'кг' },
+            3: { name: 'Морковь', unit: 'кг' }, 4: { name: 'Лук', unit: 'кг' },
+            5: { name: 'Масло', unit: 'л' }, 6: { name: 'Специи', unit: 'кг' },
+            7: { name: 'Упаковка', unit: 'шт' }
         };
         
         let selectedProduct = null;
         let paymentMethod = 'card';
         
-        document.getElementById('product-select').addEventListener('change', (e) => {
-            const productId = e.target.value;
-            if (!productId) {
-                selectedProduct = null;
-                updateDisplay();
-                return;
-            }
-            selectedProduct = stock[productId];
-            updateDisplay();
+        document.getElementById('ai-scan-btn').addEventListener('click', () => {
+            document.getElementById('receipt-input').click();
         });
         
+        document.getElementById('receipt-input').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const btn = document.getElementById('ai-scan-btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ ИИ анализирует чек...';
+            tg.showProgress();
+            
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                const base64Image = event.target.result.split(',')[1];
+                
+                try {
+                    const response = await fetch(`${API_URL}/api/parse-receipt`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image_base64: base64Image })
+                    });
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        tg.showPopup({ title: 'Ошибка', message: data.error });
+                    } else if (data.items && data.items.length > 0) {
+                        const item = data.items[0];
+                        let productId = "";
+                        for (const [id, info] of Object.entries(stock)) {
+                            if (item.name.toLowerCase().includes(info.name.toLowerCase())) {
+                                productId = id;
+                                break;
+                            }
+                        }
+                        
+                        if (productId) {
+                            document.getElementById('product-select').value = productId;
+                            document.getElementById('product-select').dispatchEvent(new Event('change'));
+                        }
+                        document.getElementById('quantity').value = item.quantity;
+                        const unitPrice = Math.round(item.total_price / item.quantity);
+                        document.getElementById('price').value = unitPrice;
+                        
+                        updateDisplay();
+                        tg.showPopup({ title: 'Успех!', message: `Распознано: ${item.name}, ${item.quantity} ${item.unit}` });
+                    } else {
+                        tg.showPopup({ title: 'Не найдено', message: 'ИИ не смог найти товары. Попробуйте вручную.' });
+                    }
+                } catch (err) {
+                    console.error(err);
+                    tg.showPopup({ title: 'Ошибка сети', message: 'Не удалось связаться с сервером.' });
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '📸 Распознать чек (ИИ)';
+                    tg.hideProgress();
+                }
+            };
+            reader.readAsDataURL(file);
+        });
+
+        document.getElementById('product-select').addEventListener('change', (e) => {
+            selectedProduct = stock[e.target.value] || null;
+            updateDisplay();
+        });
         document.getElementById('quantity').addEventListener('input', updateDisplay);
         document.getElementById('price').addEventListener('input', updateDisplay);
         
@@ -159,32 +208,13 @@
         function updateDisplay() {
             const quantity = parseFloat(document.getElementById('quantity').value) || 0;
             const price = parseFloat(document.getElementById('price').value) || 0;
-            const total = quantity * price;
-            
-            document.getElementById('total-amount').textContent = formatMoney(total) + ' сум';
-            
-            if (selectedProduct) {
-                document.getElementById('current-stock').textContent = 
-                    selectedProduct.quantity.toFixed(2) + ' ' + selectedProduct.unit;
-                document.getElementById('new-stock').textContent = 
-                    (selectedProduct.quantity + quantity).toFixed(2) + ' ' + selectedProduct.unit;
-            } else {
-                document.getElementById('current-stock').textContent = '—';
-                document.getElementById('new-stock').textContent = '—';
-            }
-            
-            const btn = document.getElementById('confirm-btn');
-            btn.disabled = !(selectedProduct && quantity > 0 && price > 0);
-        }
-        
-        function formatMoney(amount) {
-            return Math.round(amount).toLocaleString('ru-RU');
+            document.getElementById('total-amount').textContent = Math.round(quantity * price).toLocaleString('ru-RU') + ' сум';
+            document.getElementById('confirm-btn').disabled = !(selectedProduct && quantity > 0 && price > 0);
         }
         
         document.getElementById('confirm-btn').addEventListener('click', () => {
             const quantity = parseFloat(document.getElementById('quantity').value);
             const price = parseFloat(document.getElementById('price').value);
-            
             const data = {
                 action: 'add_purchase',
                 productId: parseInt(document.getElementById('product-select').value),
@@ -195,13 +225,8 @@
                 totalAmount: quantity * price,
                 paymentMethod: paymentMethod
             };
-            
             tg.sendData(JSON.stringify(data));
-            tg.showPopup({
-                title: '✅ Закупка добавлена',
-                message: `Остаток ${selectedProduct.name} увеличен на ${quantity} ${selectedProduct.unit}`,
-                buttons: [{ type: 'ok' }]
-            });
+            tg.showPopup({ title: '✅ Закупка добавлена', message: `Остаток ${selectedProduct.name} увеличен`, buttons: [{ type: 'ok' }] });
         });
     </script>
 </body>
